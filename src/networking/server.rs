@@ -37,17 +37,27 @@ impl Server {
     }
 
     pub async fn start(&mut self) {
+
+        let mut active = true;
+
         tokio::spawn(async move {
             loop {
                 let mut input = String::new();
                 if let Err(e) = io::stdin().read_line(&mut input) {
                     log!(format!("Ошибка чтения ввода: {}", e).as_str());
                     continue;
+                }else {
+                    match input.trim() {
+                        "exit" => {
+                            active = false;
+                        }
+                        &_ => {}
+                    }
                 }
                 log!(format!("{}", input.trim()).as_str());
             }
         });
-        loop {
+        while active  {
             match self.listener.accept().await {
                 Ok((stream, addr)) => self.process(stream, addr).await,
                 Err(e) => {
