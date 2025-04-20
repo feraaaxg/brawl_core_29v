@@ -9,12 +9,20 @@ define_message!(
     20104
 );
 impl Coder for AuthenticationResponseMessage {
-      async fn encode(&mut self) -> &mut Self {
-        self.write_int(self.client.lock().await.get_high_id().await);
-        self.write_int(self.client.lock().await.get_low_id().await);
+    async fn encode(&mut self) -> &mut Self {
 
-        self.write_int(self.client.lock().await.get_high_id().await);
-        self.write_int(self.client.lock().await.get_low_id().await);
+        let client = self.client.lock().await;
+
+        let high_id = client.get_high_id();
+        let low_id = client.get_low_id();
+
+        drop(client);
+
+        self.write_int(high_id);
+        self.write_int(low_id);
+
+        self.write_int(high_id);
+        self.write_int(low_id);
 
         self.write_string(Option::from("")); // id
 
