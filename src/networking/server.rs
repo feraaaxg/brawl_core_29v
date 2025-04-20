@@ -14,20 +14,36 @@ pub struct Server {
 }
 
 impl Server {
-    pub async fn new(address: String, port: String) -> Self {
+    pub async fn new(address: String, port: String) -> io::Result<Self> {
         let bind_addr = format!("{}:{}", address, port);
+        // Проверяем, что адрес можно распарсить как SocketAddr
+        let parsed_addr: SocketAddr = bind_addr.parse().map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Неверный формат адреса {}: {}", bind_addr, e),
+            )
+        })?;
         log!(format!("запущен сервер на адресе: {}", bind_addr).as_str());
-        Self {
-            listener: TcpListener::bind(bind_addr).await.unwrap(),
+        let listener = TcpListener::bind(parsed_addr).await.map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Ошибка привязки к адресу {}: {}", bind_addr, e),
+            )
+        })?;
+        Ok(Self {
+            listener,
             session_manager: SessionManager::new(),
-        }
+        })
     }
 
     pub async fn start(&mut self) {
         tokio::spawn(async move {
             loop {
                 let mut input = String::new();
-                io::stdin().read_line(&mut input).unwrap();
+                if let Err(e) = io::stdin().read_line(&mut input) {
+                    log!(format!("Ошибка чтения ввода: {}", e).as_str());
+                    continue;
+                }
                 log!(format!("{}", input.trim()).as_str());
             }
         });
