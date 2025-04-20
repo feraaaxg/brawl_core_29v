@@ -6,6 +6,7 @@ use std::io;
 use crate::networking::session_manager::SessionManager;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::sync::watch;
 use crate::networking::client::ClientConnection;
 
 pub struct Server {
@@ -16,7 +17,6 @@ pub struct Server {
 impl Server {
     pub async fn new(address: String, port: String) -> io::Result<Self> {
         let bind_addr = format!("{}:{}", address, port);
-        // Проверяем, что адрес можно распарсить как SocketAddr
         let parsed_addr: SocketAddr = bind_addr.parse().map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -37,34 +37,50 @@ impl Server {
     }
 
     pub async fn start(&mut self) {
+        // Создаём канал watch для отслеживания состояния сервера
+        let (tx, mut rx) = watch::channel(true);
 
-        let mut active = true;
-
+        // Запускаем задачу для обработки ввода
         tokio::spawn(async move {
+            let mut input = String::new();
             loop {
-                let mut input = String::new();
-                if let Err(e) = io::stdin().read_line(&mut input) {
-                    log!(format!("Ошибка чтения ввода: {}", e).as_str());
-                    continue;
-                }else {
-                    match input.trim() {
-                        "exit" => {
-                            active = false;
+                input.clear();
+                match tokio::io::AsyncBufReadExt::read_line(&mut tokio::io::stdin(), &mut input).await {
+                    Ok(0) => break, // EOF
+                    Ok(_) => {
+                        match input.trim() {
+                            "exit" => {
+                                let _ = tx.send(false); // Отправляем сигнал завершения
+                                log!("сервер завершает работу");
+                                break;
+                            }
+                            _ => log!(format!("введена команда: {}", input.trim()).as_str()),
                         }
-                        &_ => {}
                     }
+                    Err(e) => log!(format!("ошибка чтения ввода: {}", e).as_str()),
                 }
-                log!(format!("{}", input.trim()).as_str());
             }
         });
-        while active  {
-            match self.listener.accept().await {
-                Ok((stream, addr)) => self.process(stream, addr).await,
-                Err(e) => {
-                    log!(format!("ошибка при обработке клиента: {}", e).as_str());
+
+        // Основной цикл сервера
+        while *rx.borrow() {
+            tokio::select! {
+                // Проверяем изменение состояния
+                _ = rx.changed() => {
+                    if !*rx.borrow() {
+                        break;
+                    }
+                }
+                // Обрабатываем входящие соединения
+                result = self.listener.accept() => {
+                    match result {
+                        Ok((stream, addr)) => self.process(stream, addr).await,
+                        Err(e) => log!(format!("ошибка при обработке клиента: {}", e).as_str()),
+                    }
                 }
             }
         }
+        log!("сервер остановлен");
     }
 
     async fn process(&mut self, socket: TcpStream, addr: SocketAddr) {
