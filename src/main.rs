@@ -34,5 +34,5 @@ async fn main() {
     let config_file = "config.json";
     let config = load_config(config_file).unwrap();
     let mut server = Server::new(config.clone().unwrap().ip, config.unwrap().port).await;
-    server.start().await;
+    server.expect("REASON").start().await;
 }
