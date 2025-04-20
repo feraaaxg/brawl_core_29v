@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::watch;
 use crate::networking::client::ClientConnection;
+use tokio::io::{self, AsyncBufReadExt, BufReader};
 
 pub struct Server {
     listener: TcpListener,
@@ -42,10 +43,13 @@ impl Server {
 
         // Запускаем задачу для обработки ввода
         tokio::spawn(async move {
+            let stdin = tokio::io::stdin();
+            let mut reader = BufReader::new(stdin); // Оборачиваем stdin в BufReader
             let mut input = String::new();
+
             loop {
                 input.clear();
-                match tokio::io::AsyncBufReadExt::read_line(&mut tokio::io::stdin(), &mut input).await {
+                match reader.read_line(&mut input).await {
                     Ok(0) => break, // EOF
                     Ok(_) => {
                         match input.trim() {
@@ -85,7 +89,7 @@ impl Server {
 
     async fn process(&mut self, socket: TcpStream, addr: SocketAddr) {
         log!(format!("обработка соединения от: {}", addr).as_str());
-        let client = ClientConnection::new(socket.into());
+        let client = ClientConnection::new( socket.into());
         let client_arc = Arc::new(Mutex::new(client));
         self.session_manager.new_session(Arc::clone(&client_arc));
         tokio::spawn(async move {
