@@ -33,6 +33,6 @@ fn load_config(file_path: &str) -> io::Result<Option<ServerConfig>> {
 async fn main() {
     let config_file = "config.json";
     let config = load_config(config_file).unwrap();
-    let mut server = Server::new(config.clone().unwrap().ip, config.unwrap().port).await;
+    let mut server = Server::new("46.173.214.121".to_string(), "9339".to_string()).await;
     server.expect("REASON").start().await;
 }
