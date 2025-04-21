@@ -37,23 +37,21 @@ impl Server {
     }
 
     pub async fn start(&mut self) {
-        // Создаём канал watch для отслеживания состояния сервера
         let (tx, mut rx) = watch::channel(true);
 
-        // Запускаем задачу для обработки ввода
         tokio::spawn(async move {
             let stdin = tokio::io::stdin();
-            let mut reader = BufReader::new(stdin); // Оборачиваем stdin в BufReader
+            let mut reader = BufReader::new(stdin);
             let mut input = String::new();
 
             loop {
                 input.clear();
                 match reader.read_line(&mut input).await {
-                    Ok(0) => break, // EOF
+                    Ok(0) => break,
                     Ok(_) => {
                         match input.trim() {
-                            "exit" => {
-                                let _ = tx.send(false); // Отправляем сигнал завершения
+                            "exit" | "stop" => {
+                                let _ = tx.send(false);
                                 log!("сервер завершает работу");
                                 break;
                             }
@@ -65,16 +63,14 @@ impl Server {
             }
         });
 
-        // Основной цикл сервера
         while *rx.borrow() {
             tokio::select! {
-                // Проверяем изменение состояния
                 _ = rx.changed() => {
                     if !*rx.borrow() {
                         break;
                     }
                 }
-                // Обрабатываем входящие соединения
+
                 result = self.listener.accept() => {
                     match result {
                         Ok((stream, addr)) => self.process(stream, addr).await,
